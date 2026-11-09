@@ -83,7 +83,14 @@ class NotificationRepositoryTest {
                 PendingIntent.FLAG_UPDATE_CURRENT,
             )
         org.robolectric.Shadows.shadowOf(pending).setCreatorPackage("chat.app")
-        val input = RemoteInput.Builder("reply").setLabel("Reply").build()
+        val input =
+            RemoteInput.Builder("reply")
+                .setLabel("Private label not used by the island")
+                .setChoices(arrayOf("Private suggestion not used by the island"))
+                .addExtras(
+                    android.os.Bundle().apply { putString("unused", "private-extra-canary") }
+                )
+                .build()
         val action =
             Notification.Action.Builder(null, "Reply", pending).addRemoteInput(input).build()
         val n =
@@ -94,7 +101,11 @@ class NotificationRepositoryTest {
                 .addAction(action)
                 .build()
         val parsed = repo.parse(status(n), settings)!!
-        assertEquals("reply", parsed.actions.single().inputs.single().resultKey)
+        val retainedInput = parsed.actions.single().inputs.single()
+        assertEquals("reply", retainedInput.resultKey)
+        assertNull(retainedInput.label)
+        assertNull(retainedInput.choices)
+        assertTrue(retainedInput.extras.isEmpty)
         assertTrue(repo.send(parsed.actions.single(), "Hello"))
         pending.cancel()
         assertFalse(repo.send(parsed.actions.single(), "Again"))
@@ -183,5 +194,64 @@ class NotificationRepositoryTest {
                 "hash",
             )
         assertFalse(repo.open(item))
+    }
+
+    @Test
+    fun hiddenAndLockedModesDoNotExtractPayloadOrActions() {
+        val sensitive = notification("private-body-canary")
+        val neverRead =
+            object : CharSequence {
+                override val length = 4
+
+                override fun get(index: Int) = 'x'
+
+                override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = this
+
+                override fun toString(): String = error("Hidden payload must not be extracted")
+            }
+        sensitive.extras.putCharSequence(Notification.EXTRA_TITLE, neverRead)
+        sensitive.extras.putCharSequence(Notification.EXTRA_TEXT, neverRead)
+        for ((hidden, locked) in listOf(true to false, false to true)) {
+            val repo = NotificationRepository(context, runtimeGranted = { true }) { locked }
+            val parsed = repo.parse(status(sensitive), settings.copy(hideContent = hidden))!!
+            assertTrue(parsed.redacted)
+            assertEquals("New notification", parsed.title)
+            assertEquals("", parsed.text)
+            assertTrue(parsed.actions.isEmpty())
+        }
+    }
+
+    @Test
+    fun retainedPayloadExpiresAndUpdatesDoNotExtendItsLifetime() {
+        var now = 0L
+        val repo = NotificationRepository(context, elapsedMillis = { now }) { false }
+        val item = repo.parse(status(notification("payload")), settings)!!
+        repo.put(item)
+        now = 59_000L
+        repo.put(item.copy(text = "updated payload"))
+        assertEquals(1000L, repo.nextExpiryDelayMillis())
+        now = 60_000L
+        assertNull(repo.get(item.key))
+        assertEquals(listOf(item.key), repo.removeExpired())
+        assertNull(repo.nextExpiryDelayMillis())
+    }
+
+    @Test
+    fun notificationProcessingDoesNotWritePrivateFilesOrPreferences() {
+        val sbn = status(notification("private-payload-canary-184937"))
+        val repo = NotificationRepository(context) { false }
+        val root = java.io.File(context.applicationInfo.dataDir).apply { mkdirs() }
+        fun snapshot(): Map<String, List<Byte>> =
+            root
+                .walkTopDown()
+                .filter { it.isFile }
+                .associate { it.relativeTo(root).path to it.readBytes().toList() }
+        val before = snapshot()
+        val parsed = repo.parse(sbn, settings)!!
+        repo.put(parsed)
+        assertEquals(before, snapshot())
+        repo.remove(parsed.key)
+        repo.clear()
+        assertEquals(before, snapshot())
     }
 }

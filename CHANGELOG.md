@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.4
+
+- Make metadata-only/locked previews skip title, body and action extraction entirely.
+- Purge already retained payloads when privacy tightens or the device locks.
+- Bound live payload retention to one minute per key, independent of expansion and updates.
+- Scrub replaced text views, reply drafts, descriptions and child click handlers.
+- Remove redundant raw-notification Handler queuing on supported Android versions.
+- Opt the overlay out of automatic content capture/autofill; request no personalized IME learning.
+- Add data-flow, no-disk-write, hidden-payload, timed-expiry and view-cleanup regression tests.
+
 ## 1.0.3
 
 - Enable R8/resource shrinking for non-debuggable releases and reject partial signing configuration.

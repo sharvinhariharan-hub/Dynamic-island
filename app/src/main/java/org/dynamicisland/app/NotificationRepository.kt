@@ -27,6 +27,7 @@ data class IslandNotification(
     val actions: List<IslandAction>,
     val visibility: Int,
     val fingerprint: String,
+    val redacted: Boolean = false,
 )
 
 class NotificationRepository(
@@ -39,14 +40,22 @@ class NotificationRepository(
                     android.content.ComponentName(context, IslandNotificationListener::class.java)
                 )
     },
+    private val elapsedMillis: () -> Long = android.os.SystemClock::elapsedRealtime,
     private val deviceLocked: () -> Boolean = {
         val keyguard = context.getSystemService(android.app.KeyguardManager::class.java)
         keyguard.isDeviceLocked || keyguard.isKeyguardLocked
     },
 ) {
-    private val items = mutableMapOf<String, IslandNotification>()
+    companion object {
+        const val MAX_RETENTION_MILLIS = 60_000L
+    }
 
-    fun get(key: String?) = items[key]
+    private data class Retained(val notification: IslandNotification, val expiresAt: Long)
+
+    private val items = LinkedHashMap<String, Retained>()
+
+    fun get(key: String?): IslandNotification? =
+        items[key]?.takeIf { elapsedMillis() < it.expiresAt }?.notification
 
     fun remove(key: String) {
         items.remove(key)
@@ -59,7 +68,22 @@ class NotificationRepository(
     }
 
     fun put(item: IslandNotification) {
-        items[item.key] = item
+        // Updates to the same live key must not prolong payload retention indefinitely.
+        val now = elapsedMillis()
+        val deadline =
+            items[item.key]?.expiresAt?.takeIf { it > now } ?: (now + MAX_RETENTION_MILLIS)
+        items[item.key] = Retained(item, deadline)
+        while (items.size > 20) items.remove(items.keys.first())
+    }
+
+    fun nextExpiryDelayMillis(): Long? =
+        items.values.minOfOrNull { (it.expiresAt - elapsedMillis()).coerceAtLeast(0) }
+
+    fun removeExpired(): List<String> {
+        val now = elapsedMillis()
+        val expired = items.filterValues { it.expiresAt <= now }.keys.toList()
+        expired.forEach(items::remove)
+        return expired
     }
 
     fun parse(sbn: StatusBarNotification, settings: IslandSettings): IslandNotification? {
@@ -76,6 +100,22 @@ class NotificationRepository(
         )
             return null
         if (n.visibility == Notification.VISIBILITY_SECRET) return null
+        if (settings.hideContent || deviceLocked()) {
+            // Do not extract title/body, enumerate actions, or hash hidden content.
+            return IslandNotification(
+                sbn.key,
+                sbn.packageName,
+                "New notification",
+                "",
+                runCatching { context.packageManager.getApplicationIcon(sbn.packageName) }
+                    .getOrNull(),
+                n.contentIntent?.takeIf { it.creatorPackage == sbn.packageName },
+                emptyList(),
+                n.visibility,
+                "redacted:${n.visibility}",
+                redacted = true,
+            )
+        }
         val title =
             n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty().take(200)
         val body =
@@ -91,14 +131,20 @@ class NotificationRepository(
                 .filter {
                     it.actionIntent != null && it.actionIntent.creatorPackage == sbn.packageName
                 }
-                .take(4)
+                .take(2) // Only the two actions actually exposed by the island UI.
                 .map {
                     IslandAction(
-                        it.title.toString(),
+                        it.title.toString().take(80),
                         it.actionIntent,
                         it.remoteInputs
                             .orEmpty()
                             .filter { input -> input.allowFreeFormInput }
+                            .take(4)
+                            .map { input ->
+                                RemoteInput.Builder(input.resultKey)
+                                    .setAllowFreeFormInput(true)
+                                    .build()
+                            }
                             .toTypedArray(),
                         sbn.packageName,
                     )

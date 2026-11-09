@@ -306,11 +306,11 @@ class MainActivity : ComponentActivity() {
             Toggle("Hide island while device is locked", s.hideLocked) { v ->
                 vm.update { it.copy(hideLocked = v) }
             }
-            Toggle("Hide notification text & actions", s.hideContent) { v ->
+            Toggle("Metadata-only previews", s.hideContent) { v ->
                 vm.update { it.copy(hideContent = v) }
             }
             Text(
-                "On the lock screen, content and actions are always hidden. Secret notifications are never shown. Screen-off clears the presentation when lock protection applies. No notification content is saved to disk.",
+                "Metadata-only mode skips extracting titles, messages and actions; Android still grants broad notification access. Turning it on clears existing previews. Payloads and reply drafts are held only temporarily in RAM and expire after one minute, including while expanded. Lock-screen content stays hidden. No notification history is saved to disk.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(

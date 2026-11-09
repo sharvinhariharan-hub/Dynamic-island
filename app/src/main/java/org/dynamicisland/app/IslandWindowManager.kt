@@ -28,26 +28,33 @@ class IslandWindowManager(private val context: Context) {
         if (lifecycle.attached) return true
         val host =
             object : FrameLayout(context) {
-                override fun performClick(): Boolean = super.performClick()
+                    override fun performClick(): Boolean = super.performClick()
 
-                override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-                    if (
-                        event.flags and
-                            (MotionEvent.FLAG_WINDOW_IS_OBSCURED or
-                                MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0
-                    )
-                        return false
-                    return super.dispatchTouchEvent(event)
-                }
-
-                override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
-                    if (event.action == android.view.MotionEvent.ACTION_OUTSIDE) {
-                        onOutside?.invoke()
-                        return true
+                    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                        if (
+                            event.flags and
+                                (MotionEvent.FLAG_WINDOW_IS_OBSCURED or
+                                    MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0
+                        )
+                            return false
+                        return super.dispatchTouchEvent(event)
                     }
-                    return super.onTouchEvent(event)
+
+                    override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+                        if (event.action == android.view.MotionEvent.ACTION_OUTSIDE) {
+                            onOutside?.invoke()
+                            return true
+                        }
+                        return super.onTouchEvent(event)
+                    }
                 }
-            }
+                .apply {
+                    importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                    if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        importantForContentCapture =
+                            View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS
+                    }
+                }
         host.addView(content, FrameLayout.LayoutParams(-1, -1))
         val p =
             WindowManager.LayoutParams(

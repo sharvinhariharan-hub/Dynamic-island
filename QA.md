@@ -11,6 +11,21 @@
 - DataStore encode/decode bounds, disk persistence across repository instances and reset.
 - RemoteInput preservation, reply dispatch and canceled PendingIntent failure.
 
+## Version 1.0.4 notification data minimization (2026-11-09)
+
+The Kotlin suite now has 28 tests per variant. New checks cover hidden/locked payload
+non-extraction using a CharSequence that fails if read; unchanged private file contents
+across notification processing; per-key expiry and non-extension on updates; purge on
+privacy tightening; expanded preview expiry with a fresh queue item preserved; old text
+view scrubbing; and content-capture/autofill opt-out where the public APIs are available.
+Tests run at API 29, with the content-capture opt-out specifically exercised at API 30.
+No data-storage or Google-approval claims are inferred solely from these unit tests.
+
+See docs/privacy/NOTIFICATION-DATA-FLOW.md for the audited data path, settings-only
+persistence, RAM metadata limits, one-minute payload eligibility and managed-memory/OS
+limitations. No on-device installation, keyboard-provider behavior or Play Protect verdict
+was verified here. Existing older downloadable APKs do not contain these source changes.
+
 ## Version 1.0.3 release/security audit (2026-11-09)
 
 Both debug and R8-optimized/resource-shrunk release APKs compile successfully. All 22

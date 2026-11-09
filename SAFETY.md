@@ -86,6 +86,15 @@ signing and distribution assessment. [Prepared appeal evidence](docs/play-protec
 contains hashes and public fingerprints for both published APK candidates. No appeal was
 submitted, no production identity was fabricated, and unknown device facts remain unknown.
 
+## Notification data minimization
+
+The [1.0.4 data-flow audit](docs/privacy/NOTIFICATION-DATA-FLOW.md) distinguishes temporary
+RAM needed for rendering from persistent settings and system notification history.
+Metadata-only mode now avoids extracting message payloads and existing payloads are
+purged on privacy tightening. Retained payloads have a one-minute eligibility deadline,
+including expanded presentations. This is not a removal of Android's broad listener grant
+or proof that the platform installation restriction has changed.
+
 ## Official guidance
 
 - [How Google Play Protect works](https://support.google.com/googleplay/answer/2812853)

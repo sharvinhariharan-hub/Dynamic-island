@@ -17,6 +17,15 @@ configured in the audit environment, so **no production-signed APK is claimed or
 A signed release still needs device testing and applicable Google review. Debug links
 remain development artifacts, not a verified workaround for a block.
 
+## Notification data and storage
+
+See the [data-flow and retention audit](docs/privacy/NOTIFICATION-DATA-FLOW.md). Only
+settings persist; notification payloads are not written to disk, logged or uploaded.
+Metadata-only mode skips title/body/action extraction, and enabling it purges existing
+previews. Live payloads and reply drafts expire after one minute, even while expanded.
+Android still requires broad notification access; there is no display-only permission
+for another app's notification text. These changes do not guarantee Play Protect approval.
+
 ## Features
 
 - Compact black pill, notification preview and expanded presentation with damped

@@ -38,4 +38,27 @@ class OverlayWindowTest {
         assertFalse(host.isAttached)
         host.close()
     }
+
+    @Test
+    @Config(sdk = [30])
+    fun overlayOptsOutOfAutomaticContentCaptureAndAutofill() {
+        val context = RuntimeEnvironment.getApplication()
+        ShadowSettings.setCanDrawOverlays(true)
+        val host = IslandWindowManager(context)
+        val content = TextView(context)
+        try {
+            assertTrue(host.attach(content, IslandSettings()))
+            val root = content.parent as android.view.View
+            assertEquals(
+                android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS,
+                root.importantForAutofill,
+            )
+            assertEquals(
+                android.view.View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS,
+                root.importantForContentCapture,
+            )
+        } finally {
+            host.close()
+        }
+    }
 }

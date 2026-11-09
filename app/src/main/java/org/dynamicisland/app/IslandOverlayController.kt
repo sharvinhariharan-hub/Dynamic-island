@@ -23,6 +23,7 @@ class IslandOverlayController(
     private var settings = IslandSettings()
     private var panel: LinearLayout? = null
     private var expiry: Job? = null
+    private var retentionExpiry: Job? = null
     private var animator: ValueAnimator? = null
     private var animationTarget: Pair<Int, Int>? = null
     private var width = 120
@@ -30,6 +31,8 @@ class IslandOverlayController(
     private var connected = false
     private var locked = false
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
+
+    private fun deviceLocked() = keyguard.isDeviceLocked || keyguard.isKeyguardLocked
 
     init {
         window.onOutside = {
@@ -44,13 +47,16 @@ class IslandOverlayController(
     }
 
     fun configure(s: IslandSettings, listenerConnected: Boolean) {
-        val changed = settings != s || locked != keyguard.isKeyguardLocked
-        locked = keyguard.isKeyguardLocked
+        val previousState = stateMachine.state.value
+        val nowLocked = deviceLocked()
+        val changed = settings != s || locked != nowLocked
+        if ((!settings.hideContent && s.hideContent) || (!locked && nowLocked)) clear()
+        locked = nowLocked
         settings = s
         connected = listenerConnected && android.provider.Settings.canDrawOverlays(context)
         if (
             !PermissionState(android.provider.Settings.canDrawOverlays(context), connected)
-                .canPresent(s.enabled) || (s.hideLocked && keyguard.isKeyguardLocked)
+                .canPresent(s.enabled) || (s.hideLocked && deviceLocked())
         ) {
             clear()
             return
@@ -69,11 +75,15 @@ class IslandOverlayController(
                 schedule()
             }
         }
+        val expired = repo.removeExpired()
+        expired.forEach(queue::remove)
+        if (stateMachine.state.value.key in expired) advance()
+        scheduleRetentionExpiry()
         if (!window.isAttached) panel = null
         val newlyAttached = panel == null
         if (newlyAttached) createPanel()
         window.configure(s)
-        if (changed || newlyAttached) render()
+        if (changed || newlyAttached || previousState != stateMachine.state.value) render()
     }
 
     private fun createPanel() {
@@ -164,9 +174,12 @@ class IslandOverlayController(
             !context.getSystemService(android.os.PowerManager::class.java).isInteractive ||
                 !settings.enabled ||
                 !connected ||
-                (settings.hideLocked && keyguard.isKeyguardLocked)
+                (settings.hideLocked && deviceLocked())
         )
             return
+        val expired = repo.removeExpired()
+        expired.forEach(queue::remove)
+        if (stateMachine.state.value.key in expired) advance()
         if (
             !queue.offer(
                 NotificationIdentity(item.key, item.fingerprint),
@@ -174,8 +187,9 @@ class IslandOverlayController(
             )
         )
             return
-        repo.put(item)
         repo.retain(queue.keys)
+        repo.put(item)
+        scheduleRetentionExpiry()
         if (panel == null) createPanel()
         val previousKey = stateMachine.state.value.key
         if (previousKey == null) stateMachine.show(item.key)
@@ -191,7 +205,22 @@ class IslandOverlayController(
         val current = stateMachine.state.value.key
         queue.remove(key)
         repo.remove(key)
-        if (current == key) advance()
+        if (current == key) advance() else scheduleRetentionExpiry()
+    }
+
+    private fun scheduleRetentionExpiry() {
+        retentionExpiry?.cancel()
+        retentionExpiry = null
+        val waitMillis = repo.nextExpiryDelayMillis() ?: return
+        retentionExpiry =
+            scope.launch {
+                delay(waitMillis)
+                retentionExpiry = null
+                val expired = repo.removeExpired()
+                expired.forEach(queue::remove)
+                if (stateMachine.state.value.key in expired) advance()
+                else scheduleRetentionExpiry()
+            }
     }
 
     private fun schedule() {
@@ -212,6 +241,7 @@ class IslandOverlayController(
             stateMachine.show(next)
             schedule()
         }
+        scheduleRetentionExpiry()
         render()
     }
 
@@ -249,7 +279,7 @@ class IslandOverlayController(
 
     private fun open() {
         val item = repo.get(stateMachine.state.value.key) ?: return
-        if (keyguard.isKeyguardLocked) return
+        if (deviceLocked()) return
         if (repo.open(item)) {
             haptic.play(HapticEngine.Event.SUCCESS, settings.haptics)
             dismiss(false)
@@ -289,14 +319,30 @@ class IslandOverlayController(
             setOnClickListener { action() }
         }
 
+    private fun clearRenderedContent() {
+        fun scrub(view: View) {
+            if (view is ViewGroup)
+                for (index in 0 until view.childCount) scrub(view.getChildAt(index))
+            if (view is TextView) view.text = ""
+            view.contentDescription = null
+            view.setOnClickListener(null)
+            view.setOnLongClickListener(null)
+            view.clearFocus()
+        }
+        panel?.let { root ->
+            for (index in 0 until root.childCount) scrub(root.getChildAt(index))
+            root.removeAllViews()
+            root.contentDescription = "Dynamic Island ready"
+        }
+    }
+
     private fun render() {
         val view = panel ?: return
-        if (keyguard.isKeyguardLocked && settings.hideLocked) {
+        if (deviceLocked() && settings.hideLocked) {
             clear()
             return
         }
-        view.removeAllViews()
-        view.contentDescription = "Dynamic Island ready"
+        clearRenderedContent()
         val state = stateMachine.state.value
         val item = repo.get(state.key)
         val cameraInset = if (item != null) window.contentTopInsetDp() else 0
@@ -311,7 +357,7 @@ class IslandOverlayController(
                 }
             )
         else {
-            val redacted = settings.hideContent || keyguard.isKeyguardLocked
+            val redacted = settings.hideContent || deviceLocked() || item.redacted
             val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
             row.addView(
                 ImageView(context).apply {
@@ -349,7 +395,7 @@ class IslandOverlayController(
                     },
                     LinearLayout.LayoutParams(-1, if (expanded) window.dp(80) else window.dp(20)),
                 )
-            if (expanded && !keyguard.isKeyguardLocked) {
+            if (expanded && !deviceLocked()) {
                 val buttons = LinearLayout(context)
                 fun button(label: String, action: () -> Unit) {
                     buttons.addView(
@@ -377,6 +423,11 @@ class IslandOverlayController(
                                     setHintTextColor(Color.LTGRAY)
                                     setTextColor(Color.WHITE)
                                     maxLines = 2
+                                    importantForAutofill =
+                                        View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                                    imeOptions =
+                                        android.view.inputmethod.EditorInfo
+                                            .IME_FLAG_NO_PERSONALIZED_LEARNING
                                     inputType =
                                         android.text.InputType.TYPE_CLASS_TEXT or
                                             android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -399,7 +450,7 @@ class IslandOverlayController(
         val targetHeight =
             if (!expanded) if (item == null) 48 else 64
             else
-                (if (settings.hideContent || keyguard.isKeyguardLocked) 100
+                (if (settings.hideContent || deviceLocked() || item?.redacted == true) 100
                 else 170 + min(item!!.actions.size, 2) * 48)
         animate(targetWidth, targetHeight + cameraInset, expanded)
     }
@@ -448,6 +499,9 @@ class IslandOverlayController(
     fun clear() {
         expiry?.cancel()
         animator?.cancel()
+        retentionExpiry?.cancel()
+        retentionExpiry = null
+        clearRenderedContent()
         queue.clear()
         repo.clear()
         stateMachine.clear()
