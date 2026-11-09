@@ -27,3 +27,6 @@ credentials.json
 *.hprof
 *.swp
 *~
+
+__pycache__/
+*.py[cod]

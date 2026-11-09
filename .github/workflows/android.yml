@@ -5,6 +5,12 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_debug_preview:
+        description: 'Publish a developer-only debug prerelease (not approved for daily use)'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 jobs:
@@ -12,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -23,7 +29,9 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'platform-tools'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew assembleDebug testDebugUnitTest lintDebug --stacktrace
+      - run: ./gradlew assembleDebug assembleRelease testDebugUnitTest lintDebug lintRelease --stacktrace
+      - name: Verify packaged permission boundary
+        run: python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - uses: actions/upload-artifact@v4
         with:
           name: debug-apk
@@ -36,7 +44,7 @@ jobs:
             app/build/reports/tests/
             app/build/reports/lint-results-debug.*
   preview:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_debug_preview && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -56,13 +64,11 @@ jobs:
           cd preview
           sha256sum dynamic-island-debug.apk > SHA256SUMS
           cat > notes.md <<'NOTES'
-          Development preview, signed with a debug key. This is not a production release.
+          Developer testing build, signed with a debug key. Not a production release or a recommendation for daily use.
 
-          On an Android 10+ phone, download dynamic-island-debug.apk below and open it to install. Do not download the source ZIP to install the app.
+          Play Protect has blocked a previous build because this app requests sensitive notification/overlay access. Do not disable Play Protect or bypass an installation block. A passing CI build or valid signature does not guarantee Google approval.
 
-          Allow installation from your browser when Android prompts, then grant overlay and notification access inside the app and select your applications.
-
-          Debug signatures can differ between builds. If Android reports an incompatible update, uninstall the previous debug app first; this resets its preferences. Production releases require a configured release key.
+          Read SAFETY.md in the repository. Production distribution requires a managed release signing identity, device validation, and applicable store/security review. Debug certificates can differ between builds.
           NOTES
           gh release create "preview-${{ github.run_number }}-${{ github.run_attempt }}" dynamic-island-debug.apk SHA256SUMS --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Development preview ${{ github.run_number }} (debug APK)" --notes-file notes.md
   release:
@@ -72,6 +78,7 @@ jobs:
     permissions:
       contents: write
     env:
+      EXPECTED_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
       STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
       SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -82,12 +89,12 @@ jobs:
         id: signing
         shell: bash
         run: |
-          if [[ -n "$STORE_B64" && -n "$SIGNING_STORE_PASSWORD" && -n "$SIGNING_KEY_ALIAS" && -n "$SIGNING_KEY_PASSWORD" ]]; then
+          if [[ -n "$STORE_B64" && -n "$SIGNING_STORE_PASSWORD" && -n "$SIGNING_KEY_ALIAS" && -n "$SIGNING_KEY_PASSWORD" && -n "$EXPECTED_SIGNING_CERT_SHA256" ]]; then
             echo 'configured=true' >> "$GITHUB_OUTPUT"
           else
-            echo 'Signing secrets incomplete; no production APK will be published.'
+            echo 'Signing secrets or public certificate pin incomplete; no production APK will be published.'
           fi
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         if: steps.signing.outputs.configured == 'true'
         with:
           distribution: temurin
@@ -108,10 +115,11 @@ jobs:
           export SIGNING_STORE_FILE="$RUNNER_TEMP/release.jks"
           trap 'rm -f "$SIGNING_STORE_FILE"' EXIT
           printf '%s' "$STORE_B64" | base64 --decode > "$SIGNING_STORE_FILE"
-          ./gradlew assembleRelease
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify app/build/outputs/apk/release/app-release.apk
+          ./gradlew assembleRelease lintRelease
+          python3 scripts/verify_apk.py app/build/outputs/apk/release/app-release.apk --production --expected-cert-sha256 "$EXPECTED_SIGNING_CERT_SHA256" --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" > APK-VERIFICATION.txt
+          sha256sum app/build/outputs/apk/release/app-release.apk > SHA256SUMS
       - name: Publish release APK
         if: steps.signing.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/release/app-release.apk --verify-tag --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/release/app-release.apk APK-VERIFICATION.txt SHA256SUMS --verify-tag --generate-notes

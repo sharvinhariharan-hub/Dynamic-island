@@ -9,3 +9,7 @@ against another user's device. Never send signing keys.
 This app has no server or telemetry. Notification access and overlay permission are
 explicit Android grants and can be revoked in system settings. Content is transient
 in memory. Android system/OEM restrictions must not be bypassed.
+
+Read [SAFETY.md](SAFETY.md) for the reported Play Protect installation block, sensitive-access
+boundaries and unresolved production-readiness requirements. Never bypass Play Protect
+as a workaround for a reported security issue.

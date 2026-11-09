@@ -115,6 +115,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        // Do not accept permission/settings taps obscured by another overlay.
+        if (
+            event.flags and
+                (android.view.MotionEvent.FLAG_WINDOW_IS_OBSCURED or
+                    android.view.MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0
+        )
+            return false
+        return super.dispatchTouchEvent(event)
+    }
+
     override fun onResume() {
         super.onResume()
         (application as IslandApplication).refresh()
@@ -129,6 +140,8 @@ class MainActivity : ComponentActivity() {
         var appSearch by remember { mutableStateOf("") }
         var showApps by remember { mutableStateOf(false) }
         var reset by remember { mutableStateOf(false) }
+        var grantOverlay by remember { mutableStateOf(false) }
+        var grantNotifications by remember { mutableStateOf(false) }
         val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
         DisposableEffect(lifecycle) {
             val obs =
@@ -204,26 +217,13 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-            Button(
-                onClick = {
-                    openSettings(
-                        Intent(
-                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:$packageName"),
-                        )
-                    )
-                },
-                Modifier.fillMaxWidth(),
-            ) {
+            Button(onClick = { grantOverlay = true }, Modifier.fillMaxWidth()) {
                 Text(
                     if (permission.overlay) "Overlay permission granted"
                     else "Grant overlay permission"
                 )
             }
-            Button(
-                onClick = { openSettings(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
-                Modifier.fillMaxWidth(),
-            ) {
+            Button(onClick = { grantNotifications = true }, Modifier.fillMaxWidth()) {
                 Text(
                     if (permission.listener) "Manage notification access"
                     else "Grant notification access"
@@ -340,6 +340,57 @@ class MainActivity : ComponentActivity() {
             Text(
                 "Open source • MIT • No internet permission",
                 style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        if (grantOverlay || grantNotifications) {
+            val overlayGrant = grantOverlay
+            AlertDialog(
+                onDismissRequest = {
+                    grantOverlay = false
+                    grantNotifications = false
+                },
+                title = {
+                    Text(
+                        if (overlayGrant) "Display over other apps"
+                        else "Sensitive notification access"
+                    )
+                },
+                text = {
+                    Text(
+                        if (overlayGrant)
+                            "The island draws a small interactive window over other apps. Android can hide it on protected screens. Only continue if you trust this app. You can revoke this permission in system settings."
+                        else
+                            "Android grants broad notification access, which can expose private messages and verification codes. Dynamic Island filters to your selected apps, keeps content only in memory, and has no internet access. Select only apps you trust; avoid banking and authentication apps. You can revoke access at any time. Do not disable Play Protect or bypass a security block to install this app."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            grantOverlay = false
+                            grantNotifications = false
+                            openSettings(
+                                if (overlayGrant)
+                                    Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:$packageName"),
+                                    )
+                                else Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            )
+                        }
+                    ) {
+                        Text("Continue to Android settings")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            grantOverlay = false
+                            grantNotifications = false
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                },
             )
         }
         if (reset)

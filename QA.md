@@ -11,6 +11,23 @@
 - DataStore encode/decode bounds, disk persistence across repository instances and reset.
 - RemoteInput preservation, reply dispatch and canceled PendingIntent failure.
 
+## Version 1.0.2 security validation (2026-11-09)
+
+The safety-hardening build compiles in debug and release variants. All 21 tests pass,
+including foreign-PendingIntent rejection, lock-state changes between rendering and
+dispatch, and fully/partially obscured permission-control and island-action touches. Android lint passes.
+The packaged APK passes the permission allowlist, explicit no-backup/no-cleartext and
+exported-component protection checks. Production mode rejects the debug APK as expected. A temporary one-day test certificate
+verified that the production gate accepts an exact public certificate pin and rejects
+missing/mismatched pins; the fixture key and APK were then deleted. This did not create
+a production signing identity.
+An unsigned release APK is checked only with the explicit local `--unsigned` mode; it
+cannot be used with production verification or published by the release workflow.
+
+A user reported Play Protect blocking the 1.0.1 preview. These changes do not demonstrate
+that Google's block has been removed. No signed production identity, Google approval,
+or physical-device certification has been established. Read SAFETY.md before use.
+
 ## Version 1.0.1 validation (2026-11-09)
 
 Debug/release compilation, all 17 JUnit/Robolectric tests and Android lint passed.

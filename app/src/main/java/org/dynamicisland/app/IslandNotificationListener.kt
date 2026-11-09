@@ -26,6 +26,10 @@ class IslandNotificationListener : NotificationListenerService() {
         main.post {
             if (active) {
                 app.refresh()
+                if (!app.canProcessNotifications()) {
+                    app.overlay.clear()
+                    return@post
+                }
                 runCatching { app.notifications.parse(sbn, app.settingsSnapshot()) }
                     .getOrNull()
                     ?.let(app.overlay::arrival) ?: app.overlay.remove(sbn.key)

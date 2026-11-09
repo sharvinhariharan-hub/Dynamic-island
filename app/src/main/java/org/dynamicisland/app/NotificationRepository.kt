@@ -14,6 +14,7 @@ data class IslandAction(
     val title: String,
     val pending: PendingIntent,
     val inputs: Array<RemoteInput> = emptyArray(),
+    val sourcePackage: String = pending.creatorPackage.orEmpty(),
 )
 
 data class IslandNotification(
@@ -28,7 +29,13 @@ data class IslandNotification(
     val fingerprint: String,
 )
 
-class NotificationRepository(private val context: Context) {
+class NotificationRepository(
+    private val context: Context,
+    private val deviceLocked: () -> Boolean = {
+        val keyguard = context.getSystemService(android.app.KeyguardManager::class.java)
+        keyguard.isDeviceLocked || keyguard.isKeyguardLocked
+    },
+) {
     private val items = mutableMapOf<String, IslandNotification>()
 
     fun get(key: String?) = items[key]
@@ -73,7 +80,9 @@ class NotificationRepository(private val context: Context) {
         val actions =
             n.actions
                 .orEmpty()
-                .filter { it.actionIntent != null }
+                .filter {
+                    it.actionIntent != null && it.actionIntent.creatorPackage == sbn.packageName
+                }
                 .take(4)
                 .map {
                     IslandAction(
@@ -83,6 +92,7 @@ class NotificationRepository(private val context: Context) {
                             .orEmpty()
                             .filter { input -> input.allowFreeFormInput }
                             .toTypedArray(),
+                        sbn.packageName,
                     )
                 }
         val raw =
@@ -97,7 +107,7 @@ class NotificationRepository(private val context: Context) {
             title,
             body,
             runCatching { context.packageManager.getApplicationIcon(sbn.packageName) }.getOrNull(),
-            n.contentIntent,
+            n.contentIntent?.takeIf { it.creatorPackage == sbn.packageName },
             actions,
             n.visibility,
             fingerprint,
@@ -106,6 +116,10 @@ class NotificationRepository(private val context: Context) {
 
     fun send(action: IslandAction, reply: String? = null): Boolean =
         runCatching {
+                check(!deviceLocked()) { "Device must be unlocked" }
+                check(action.pending.creatorPackage == action.sourcePackage) {
+                    "Action origin changed"
+                }
                 val intent = Intent()
                 if (reply != null && action.inputs.isNotEmpty()) {
                     val results = Bundle()
@@ -124,7 +138,10 @@ class NotificationRepository(private val context: Context) {
             if (android.os.Build.VERSION.SDK_INT >= 34)
                 android.app.ActivityOptions.makeBasic()
                     .setPendingIntentBackgroundActivityStartMode(
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                        if (android.os.Build.VERSION.SDK_INT >= 36)
+                            android.app.ActivityOptions
+                                .MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+                        else android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
                     )
                     .toBundle()
             else null
@@ -133,8 +150,11 @@ class NotificationRepository(private val context: Context) {
 
     fun open(item: IslandNotification): Boolean =
         runCatching {
-                if (item.pending != null) sendFromInteraction(item.pending, Intent())
-                else {
+                check(!deviceLocked()) { "Device must be unlocked" }
+                if (item.pending != null) {
+                    check(item.pending.creatorPackage == item.pkg) { "Notification origin changed" }
+                    sendFromInteraction(item.pending, Intent())
+                } else {
                     val intent =
                         context.packageManager.getLaunchIntentForPackage(item.pkg) ?: return false
                     context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

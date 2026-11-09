@@ -90,6 +90,20 @@ class IslandApplication : Application() {
         )
     }
 
+    /** Reject processing before parsing content if any runtime grant was revoked. */
+    fun canProcessNotifications(): Boolean {
+        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        return current.enabled &&
+            connected.value &&
+            Settings.canDrawOverlays(this) &&
+            getSystemService(NotificationManager::class.java)
+                .isNotificationListenerAccessGranted(
+                    ComponentName(this, IslandNotificationListener::class.java)
+                ) &&
+            getSystemService(android.os.PowerManager::class.java).isInteractive &&
+            (!current.hideLocked || (!keyguard.isDeviceLocked && !keyguard.isKeyguardLocked))
+    }
+
     fun settingsSnapshot() = current
 
     fun preview() {

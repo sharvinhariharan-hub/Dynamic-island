@@ -26,12 +26,20 @@ A display cutout is optional. Centered top cutouts inform positioning; corner cu
 foldables, OEM status bars and rotation can require manual offset adjustment. Android
 controls which surfaces overlays may cover. Hardware behavior is not universally identical.
 
-## Installation
+## Safety status
+
+**A previous debug APK was blocked by Play Protect. Do not bypass that block or disable
+Play Protect. This project is not yet certified or recommended for daily use.** Read
+[SAFETY.md](SAFETY.md) for the sensitive permissions, implemented safeguards, testing
+limits, and production-signing/review requirements. Source/build checks cannot guarantee
+Google approval. Public debug prereleases no longer publish automatically.
+
+## Installation (developer testing only)
 
 To **use the app on a phone, install an APK**. GitHub's green **Code → Download ZIP**
 button downloads source code and cannot install an Android app.
 
-Once this repository is published and its build completes:
+For developer testing on a device that allows installation without bypassing a security block:
 
 1. Open [Releases](https://github.com/sharvinhariharan-hub/dynamic-island/releases)
    in your phone's browser.
@@ -53,7 +61,8 @@ After installation:
 
 1. Open Dynamic Island and grant **Display over other apps**.
 2. Grant **Notification access** in the linked Android settings screen. Android may
-   require Settings → App info → menu → Allow restricted settings for sideloaded apps.
+   restrict sideloaded notification listeners. If access or installation is blocked, stop
+   and review SAFETY.md instead of bypassing the protection.
 3. Choose applications; none are selected by default. Enable Dynamic Island.
 4. Use **Test island preview**, then receive a real notification from a selected app.
 5. If your OEM stops the listener, review battery/background settings using the guidance
@@ -63,13 +72,13 @@ After installation:
 
 - **404 / repository not found:** the project has not been published, the address is wrong,
   or access is restricted. A local Git commit alone does not create a GitHub repository.
-- **No APK under Releases:** check that the main-branch Android build and its `preview`
-  job completed. Both require an existing repository; publishing the preview requires
-  Actions contents-write permission. Use the `debug-apk` artifact if only preview publication fails.
+- **No APK under Releases:** ordinary main pushes deliberately do not publish debug
+  prereleases. A developer must explicitly opt in using the manual workflow input.
+  CI artifacts are for development, not an alternative path around a Play Protect block.
 - **Downloaded a ZIP:** source archives cannot be installed. An Actions artifact ZIP
   must be unzipped; install the `.apk` inside it.
-- **Notification access is restricted:** on recent Android versions, open system App info
-  for Dynamic Island and use **Allow restricted settings**, then retry notification access.
+- **Play Protect or notification access is blocked:** stop installation/setup and follow
+  SAFETY.md. The maintainer must resolve distribution/review issues; do not disable protection.
 
 ## Permissions
 
@@ -104,14 +113,20 @@ requires no network. Debug APKs use the local Android debug signing key.
 ## Release signing and CI
 
 Every push/PR builds, runs unit tests and lint, and uploads a debug APK. Successful
-main-branch pushes also publish a clearly labeled **prerelease** debug APK and SHA-256
-checksum for direct phone downloads. Preview publication never runs for fork PRs.
+manual main-branch runs publish a **developer-only prerelease** debug APK and SHA-256
+checksum only when `publish_debug_preview` is explicitly selected. Preview publication
+never runs for ordinary pushes or fork PRs. Debug artifacts are not production recommendations.
 Version tags
-`v*` additionally build and publish a signed release **only when all signing secrets
+`v*` additionally build and publish a signed release **only when all signing secrets and the trusted certificate pin
 exist**. Configure repository Actions secrets:
 
 - `ANDROID_KEYSTORE_BASE64`: base64-encoded release keystore
 - `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
+
+Also configure the Actions variable `ANDROID_SIGNING_CERT_SHA256` with the trusted
+release certificate's public SHA-256 fingerprint. Production verification rejects
+unconfigured or mismatched identities, Android Debug certificates and debuggable APKs.
+The public certificate fingerprint is not a private signing key.
 
 Keep the same release key securely backed up for updates. The workflow decodes it into
 runner temporary storage, verifies the APK signature and deletes it after use. No signing

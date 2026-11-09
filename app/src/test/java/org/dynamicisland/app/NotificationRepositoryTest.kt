@@ -82,6 +82,7 @@ class NotificationRepositoryTest {
                 Intent("test.reply"),
                 PendingIntent.FLAG_UPDATE_CURRENT,
             )
+        org.robolectric.Shadows.shadowOf(pending).setCreatorPackage("chat.app")
         val input = RemoteInput.Builder("reply").setLabel("Reply").build()
         val action =
             Notification.Action.Builder(null, "Reply", pending).addRemoteInput(input).build()
@@ -97,5 +98,60 @@ class NotificationRepositoryTest {
         assertTrue(repo.send(parsed.actions.single(), "Hello"))
         pending.cancel()
         assertFalse(repo.send(parsed.actions.single(), "Again"))
+    }
+
+    @Test
+    fun forgedCrossAppIntentsAreExcludedAndRejectedAtDispatch() {
+        val repo = NotificationRepository(context) { false }
+        val foreign =
+            PendingIntent.getBroadcast(
+                context,
+                88,
+                Intent("foreign"),
+                PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        val n =
+            Notification.Builder(context, "chat")
+                .setContentTitle("Sender")
+                .setContentText("Message")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentIntent(foreign)
+                .addAction(Notification.Action.Builder(null, "Foreign action", foreign).build())
+                .build()
+        val parsed = repo.parse(status(n), settings)!!
+        assertNull(parsed.pending)
+        assertTrue(parsed.actions.isEmpty())
+        assertFalse(repo.send(IslandAction("Forged", foreign, sourcePackage = "chat.app")))
+        assertFalse(repo.open(parsed.copy(pending = foreign)))
+    }
+
+    @Test
+    fun lockIsRecheckedAtDispatchAfterRendering() {
+        var locked = false
+        val repo = NotificationRepository(context) { locked }
+        val pending =
+            PendingIntent.getBroadcast(
+                context,
+                89,
+                Intent("reply.lock"),
+                PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        val action = IslandAction("Reply", pending, arrayOf(RemoteInput.Builder("reply").build()))
+        assertTrue(repo.send(action, "Allowed while unlocked"))
+        locked = true
+        assertFalse(repo.send(action, "Must not send"))
+        val item =
+            IslandNotification(
+                "key",
+                context.packageName,
+                "Sender",
+                "Message",
+                null,
+                pending,
+                emptyList(),
+                Notification.VISIBILITY_PRIVATE,
+                "hash",
+            )
+        assertFalse(repo.open(item))
     }
 }

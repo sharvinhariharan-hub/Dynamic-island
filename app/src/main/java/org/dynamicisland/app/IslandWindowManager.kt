@@ -30,6 +30,16 @@ class IslandWindowManager(private val context: Context) {
             object : FrameLayout(context) {
                 override fun performClick(): Boolean = super.performClick()
 
+                override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                    if (
+                        event.flags and
+                            (MotionEvent.FLAG_WINDOW_IS_OBSCURED or
+                                MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0
+                    )
+                        return false
+                    return super.dispatchTouchEvent(event)
+                }
+
                 override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
                     if (event.action == android.view.MotionEvent.ACTION_OUTSIDE) {
                         onOutside?.invoke()
@@ -66,8 +76,7 @@ class IslandWindowManager(private val context: Context) {
                 true
             }
             .getOrElse {
-                root = null
-                params = null
+                close()
                 false
             }
     }
