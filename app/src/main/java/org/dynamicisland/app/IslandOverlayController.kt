@@ -24,6 +24,7 @@ class IslandOverlayController(
     private var panel: LinearLayout? = null
     private var expiry: Job? = null
     private var animator: ValueAnimator? = null
+    private var animationTarget: Pair<Int, Int>? = null
     private var width = 120
     private var height = 48
     private var connected = false
@@ -31,7 +32,15 @@ class IslandOverlayController(
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
 
     init {
-        window.onOutside = { if (stateMachine.state.value.mode == IslandMode.EXPANDED) collapse() }
+        window.onOutside = {
+            // Keyboard touches can be reported as outside touches by some OEMs.
+            // Keep an active reply intact; the explicit Collapse button stays available.
+            if (
+                stateMachine.state.value.mode == IslandMode.EXPANDED &&
+                    panel?.findFocus() !is EditText
+            )
+                collapse()
+        }
     }
 
     fun configure(s: IslandSettings, listenerConnected: Boolean) {
@@ -168,11 +177,13 @@ class IslandOverlayController(
         repo.put(item)
         repo.retain(queue.keys)
         if (panel == null) createPanel()
-        if (stateMachine.state.value.key == null) stateMachine.show(item.key)
+        val previousKey = stateMachine.state.value.key
+        if (previousKey == null) stateMachine.show(item.key)
         haptic.play(HapticEngine.Event.ARRIVAL, settings.haptics)
         if (stateMachine.state.value.mode != IslandMode.EXPANDED) {
             render()
-            schedule()
+            // Waiting arrivals must not continually postpone the visible item's expiry.
+            if (previousKey == null || previousKey == item.key) schedule()
         }
     }
 
@@ -256,6 +267,28 @@ class IslandOverlayController(
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
 
+    private fun actionButton(label: String, action: () -> Unit): Button =
+        Button(context).apply {
+            text = label
+            textSize = 12f
+            isAllCaps = false
+            minWidth = 0
+            minimumWidth = 0
+            setTextColor(0xff82e0c0.toInt())
+            val shape =
+                GradientDrawable().apply {
+                    setColor(0xff1c2225.toInt())
+                    cornerRadius = window.dp(14).toFloat()
+                }
+            background =
+                android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0xff35413f.toInt()),
+                    shape,
+                    null,
+                )
+            setOnClickListener { action() }
+        }
+
     private fun render() {
         val view = panel ?: return
         if (keyguard.isKeyguardLocked && settings.hideLocked) {
@@ -263,6 +296,7 @@ class IslandOverlayController(
             return
         }
         view.removeAllViews()
+        view.contentDescription = "Dynamic Island ready"
         val state = stateMachine.state.value
         val item = repo.get(state.key)
         val cameraInset = if (item != null) window.contentTopInsetDp() else 0
@@ -293,25 +327,36 @@ class IslandOverlayController(
                 },
                 LinearLayout.LayoutParams(0, -2, 1f),
             )
+            if (queue.keys.size > 1) {
+                row.addView(
+                    text("${queue.keys.indexOf(item.key) + 1}/${queue.keys.size}", 11f).apply {
+                        setTextColor(0xff82e0c0.toInt())
+                        setPadding(window.dp(8), 0, 0, 0)
+                        contentDescription =
+                            "Notification ${queue.keys.indexOf(item.key) + 1} of ${queue.keys.size}. Swipe sideways to switch"
+                    }
+                )
+            }
             view.addView(row)
             view.contentDescription =
                 if (redacted) "New notification. Long press to expand"
                 else "${item.title}. ${item.text}. Long press to expand"
             if (!redacted)
                 view.addView(
-                    text(item.text, 12f).apply { maxLines = if (expanded) 4 else 1 },
+                    text(item.text, 13f).apply {
+                        setTextColor(0xffc4cacf.toInt())
+                        maxLines = if (expanded) 4 else 1
+                    },
                     LinearLayout.LayoutParams(-1, if (expanded) window.dp(80) else window.dp(20)),
                 )
             if (expanded && !keyguard.isKeyguardLocked) {
                 val buttons = LinearLayout(context)
                 fun button(label: String, action: () -> Unit) {
                     buttons.addView(
-                        Button(context).apply {
-                            text = label
-                            textSize = 12f
-                            setOnClickListener { action() }
+                        actionButton(label, action),
+                        LinearLayout.LayoutParams(0, window.dp(48), 1f).apply {
+                            setMargins(window.dp(2), 0, window.dp(2), 0)
                         },
-                        LinearLayout.LayoutParams(0, window.dp(48), 1f),
                     )
                 }
                 button("Open") { open() }
@@ -321,10 +366,7 @@ class IslandOverlayController(
                     item.actions.take(2).forEach { action ->
                         if (action.inputs.isEmpty())
                             view.addView(
-                                Button(context).apply {
-                                    text = action.title
-                                    setOnClickListener { interact(repo.send(action)) }
-                                },
+                                actionButton(action.title) { interact(repo.send(action)) },
                                 LinearLayout.LayoutParams(-1, window.dp(48)),
                             )
                         else {
@@ -341,14 +383,11 @@ class IslandOverlayController(
                                 }
                             replyRow.addView(input, LinearLayout.LayoutParams(0, window.dp(48), 1f))
                             replyRow.addView(
-                                Button(context).apply {
-                                    text = "Send"
-                                    contentDescription = action.title
-                                    setOnClickListener {
+                                actionButton("Send") {
                                         val reply = input.text.toString().trim()
                                         if (reply.isNotEmpty()) interact(repo.send(action, reply))
                                     }
-                                },
+                                    .apply { contentDescription = action.title },
                                 LinearLayout.LayoutParams(window.dp(80), window.dp(48)),
                             )
                             view.addView(replyRow)
@@ -373,7 +412,20 @@ class IslandOverlayController(
     }
 
     private fun animate(w: Int, h: Int, expanded: Boolean) {
+        val target = w to h
+        if (animationTarget == target && animator?.isRunning == true) return
         animator?.cancel()
+        animationTarget = target
+        if (width == w && height == h) {
+            window.resize(w, h, expanded)
+            return
+        }
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            width = w
+            height = h
+            window.resize(w, h, expanded)
+            return
+        }
         val fromW = width
         val fromH = height
         animator =
@@ -401,6 +453,9 @@ class IslandOverlayController(
         stateMachine.clear()
         window.close()
         panel = null
+        width = 120
+        height = 48
+        animationTarget = null
     }
 
     fun destroy() {

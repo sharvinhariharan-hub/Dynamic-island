@@ -8,14 +8,18 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -141,6 +145,20 @@ class MainActivity : ComponentActivity() {
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.padding(vertical = 20.dp)
+                        .size(132.dp, 44.dp)
+                        .background(Color.Black, RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    Box(
+                        Modifier.padding(end = 18.dp)
+                            .size(8.dp)
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50))
+                    )
+                }
+            }
             Text("Dynamic Island", style = MaterialTheme.typography.headlineLarge)
             Text(
                 "A quieter place for your notifications.",
@@ -149,13 +167,43 @@ class MainActivity : ComponentActivity() {
             Toggle("Enable Dynamic Island", s.enabled) {
                 vm.update { old -> old.copy(enabled = it) }
             }
-            Text(
-                if (!permission.overlay) "Overlay permission is required."
-                else if (!permission.listener) "Notification access is required."
-                else if (!connected)
-                    "Waiting for Android to connect the listener. Try toggling notification access."
-                else "Ready • notifications stay on this device"
-            )
+            Card(
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+            ) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        when {
+                            !permission.overlay || !permission.listener -> "Finish setup"
+                            !s.enabled -> "Ready when you are"
+                            !connected -> "Connecting to Android"
+                            s.apps.isEmpty() -> "Choose your applications"
+                            else -> "Your island is ready"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        when {
+                            !permission.overlay ->
+                                "1. Allow the floating island to appear over other apps."
+                            !permission.listener ->
+                                "2. Allow notification access so selected apps can appear here."
+                            !s.enabled ->
+                                "Enable Dynamic Island above, then select the apps you want to see."
+                            !connected ->
+                                "Waiting for the notification listener. Reopen notification access if this takes too long."
+                            s.apps.isEmpty() ->
+                                "No apps are selected. The test preview works, but real notifications need an app selection."
+                            else ->
+                                "${s.apps.size} apps selected · Everything stays on this device."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
             Button(
                 onClick = {
                     openSettings(
@@ -197,19 +245,22 @@ class MainActivity : ComponentActivity() {
                     label = { Text("Find an app") },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                apps
-                    .filter {
+                val matches =
+                    apps.filter {
                         it.label.contains(appSearch, true) || it.pkg.contains(appSearch, true)
                     }
-                    .forEach { app ->
-                        Toggle(app.label, app.pkg in s.apps) { checked ->
-                            vm.update {
-                                it.copy(
-                                    apps = if (checked) it.apps + app.pkg else it.apps - app.pkg
-                                )
-                            }
+                if (matches.isEmpty())
+                    Text(
+                        "No matching apps. Try a different name.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                matches.forEach { app ->
+                    Toggle(app.label, app.pkg in s.apps) { checked ->
+                        vm.update {
+                            it.copy(apps = if (checked) it.apps + app.pkg else it.apps - app.pkg)
                         }
                     }
+                }
             }
             HorizontalDivider()
             Text("Appearance & motion", style = MaterialTheme.typography.titleLarge)
@@ -328,11 +379,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Toggle(label: String, checked: Boolean, change: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        Modifier.fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = change),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = change)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

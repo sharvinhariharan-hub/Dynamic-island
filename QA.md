@@ -11,7 +11,24 @@
 - DataStore encode/decode bounds, disk persistence across repository instances and reset.
 - RemoteInput preservation, reply dispatch and canceled PendingIntent failure.
 
-## Recorded local results (2026-11-09)
+## Version 1.0.1 validation (2026-11-09)
+
+Debug/release compilation, all 17 JUnit/Robolectric tests and Android lint passed.
+The additional tests exercise real overlay-controller expiry with virtual time:
+waiting notifications cannot starve the current preview, while changed current
+content receives a fresh preview duration. The debug APK signature was verified,
+and the manifest reports versionCode 2 / versionName 1.0.1, API 29 minimum and API 36 target.
+
+The workflow YAML and embedded Bash were syntax-checked locally. Direct-download
+prereleases are gated on a passing build, restricted to main-branch push/manual events,
+and explicitly marked as debug prereleases. Remote Actions execution and public
+asset download cannot be verified until GitHub repository creation/access is available.
+The configured integration currently rejects repository creation with HTTP 403.
+
+No physical device was connected in this validation session. Visual motion, keyboard
+behavior, cutouts and vibration still require the manual checks below.
+
+## Version 1.0.0 recorded local results (2026-11-09)
 
 `assembleDebug assembleRelease testDebugUnitTest lintDebug` completed successfully
 on the final source. All 15 tests passed. Android lint reported 0 errors and 15

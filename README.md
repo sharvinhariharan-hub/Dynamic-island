@@ -28,11 +28,28 @@ controls which surfaces overlays may cover. Hardware behavior is not universally
 
 ## Installation
 
-Open [Actions](https://github.com/sharvinhariharan-hub/dynamic-island/actions)
-→ **Android build → successful run → Artifacts → debug-apk** and unzip
-the downloaded artifact. Install `app-debug.apk`, allowing installation from your chosen
-file manager if requested. Debug artifacts are development builds, not production releases.
-Signed production APKs appear under Releases only for version tags with configured signing.
+To **use the app on a phone, install an APK**. GitHub's green **Code → Download ZIP**
+button downloads source code and cannot install an Android app.
+
+Once this repository is published and its build completes:
+
+1. Open [Releases](https://github.com/sharvinhariharan-hub/dynamic-island/releases)
+   in your phone's browser.
+2. Open a release labeled **Development preview (debug APK)**, expand **Assets**, and
+   download **dynamic-island-debug.apk**. Source ZIP/TAR files are for developers.
+3. Open the APK from Downloads and allow installation from that browser/file manager
+   when Android prompts. These preview APKs are debug builds, not production releases.
+
+Public release assets can be downloaded without signing in to GitHub. Alternatively,
+open [Actions](https://github.com/sharvinhariharan-hub/dynamic-island/actions) →
+**Android build → successful run → Artifacts → debug-apk**, sign in if prompted,
+unzip the artifact and install `app-debug.apk`.
+
+Signed production APKs are published only for version tags with configured signing.
+Debug keys can differ between builds; if Android rejects an update as incompatible,
+uninstall the earlier debug app first (this clears its settings).
+
+After installation:
 
 1. Open Dynamic Island and grant **Display over other apps**.
 2. Grant **Notification access** in the linked Android settings screen. Android may
@@ -41,6 +58,18 @@ Signed production APKs appear under Releases only for version tags with configur
 4. Use **Test island preview**, then receive a real notification from a selected app.
 5. If your OEM stops the listener, review battery/background settings using the guidance
    in the app. No exemption is requested automatically.
+
+### Download troubleshooting
+
+- **404 / repository not found:** the project has not been published, the address is wrong,
+  or access is restricted. A local Git commit alone does not create a GitHub repository.
+- **No APK under Releases:** check that the main-branch Android build and its `preview`
+  job completed. Both require an existing repository; publishing the preview requires
+  Actions contents-write permission. Use the `debug-apk` artifact if only preview publication fails.
+- **Downloaded a ZIP:** source archives cannot be installed. An Actions artifact ZIP
+  must be unzipped; install the `.apk` inside it.
+- **Notification access is restricted:** on recent Android versions, open system App info
+  for Dynamic Island and use **Allow restricted settings**, then retry notification access.
 
 ## Permissions
 
@@ -74,7 +103,10 @@ requires no network. Debug APKs use the local Android debug signing key.
 
 ## Release signing and CI
 
-Every push/PR builds, runs unit tests and lint, and uploads a debug APK. Version tags
+Every push/PR builds, runs unit tests and lint, and uploads a debug APK. Successful
+main-branch pushes also publish a clearly labeled **prerelease** debug APK and SHA-256
+checksum for direct phone downloads. Preview publication never runs for fork PRs.
+Version tags
 `v*` additionally build and publish a signed release **only when all signing secrets
 exist**. Configure repository Actions secrets:
 

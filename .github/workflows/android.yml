@@ -31,6 +31,36 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.*
+  preview:
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: debug-apk
+          path: preview
+      - name: Publish an explicitly labeled development preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mv preview/app-debug.apk preview/dynamic-island-debug.apk
+          cd preview
+          sha256sum dynamic-island-debug.apk > SHA256SUMS
+          cat > notes.md <<'NOTES'
+          Development preview, signed with a debug key. This is not a production release.
+
+          On an Android 10+ phone, download dynamic-island-debug.apk below and open it to install. Do not download the source ZIP to install the app.
+
+          Allow installation from your browser when Android prompts, then grant overlay and notification access inside the app and select your applications.
+
+          Debug signatures can differ between builds. If Android reports an incompatible update, uninstall the previous debug app first; this resets its preferences. Production releases require a configured release key.
+          NOTES
+          gh release create "preview-${{ github.run_number }}-${{ github.run_attempt }}" dynamic-island-debug.apk SHA256SUMS --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Development preview ${{ github.run_number }} (debug APK)" --notes-file notes.md
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
