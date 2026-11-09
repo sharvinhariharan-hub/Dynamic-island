@@ -30,3 +30,16 @@ credentials.json
 
 __pycache__/
 *.py[cod]
+.envrc
+.secrets/
+*.pfx
+*.p8
+*.apks
+*.idsig
+*.keystore.*
+*.jks.*
+*credentials*.json
+*service-account*.json
+/security-reports/
+/APK-VERIFICATION.*
+/SHA256SUMS

@@ -4,6 +4,19 @@ A local, native Android notification island. Kotlin, Jetpack Compose settings,
 Android WindowManager overlay, MIT licensed. No accounts, servers, ads, analytics,
 or internet permission. This independent project is not affiliated with Apple.
 
+## Security audit and Play Protect review
+
+See [the 1.0.3 audit](docs/security/AUDIT.md) and [appeal evidence](docs/play-protect/README.md).
+Google documents that internet-sideloaded apps with sensitive notification access can be
+blocked by enhanced fraud protection. This is consistent with the reported warning;
+Google's exact decision has not been independently verified. Required notification and
+overlay access remain visible and essential; they are not hidden or removed to evade policy.
+
+Release builds now use R8 and resource shrinking. No production signing credentials are
+configured in the audit environment, so **no production-signed APK is claimed or published**.
+A signed release still needs device testing and applicable Google review. Debug links
+remain development artifacts, not a verified workaround for a block.
+
 ## Features
 
 - Compact black pill, notification preview and expanded presentation with damped
@@ -102,13 +115,18 @@ Set `ANDROID_HOME` or put `sdk.dir=/your/sdk` in untracked `local.properties`.
 ```sh
 git clone https://github.com/sharvinhariharan-hub/dynamic-island.git
 cd dynamic-island
-./gradlew assembleDebug testDebugUnitTest lintDebug
+./gradlew assembleDebug assembleRelease testDebugUnitTest testReleaseUnitTest lintDebug lintRelease
+python3 -m unittest discover -s scripts/tests
+python3 -O -m unittest discover -s scripts/tests
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 The Gradle wrapper pins 8.13 and its distribution SHA-256. Development dependencies
 require network access to Google Maven and Maven Central; the installed application
-requires no network. Debug APKs use the local Android debug signing key.
+requires no network. Debug APKs use the local Android debug signing key. Production release builds are
+non-debuggable, R8-optimized and resource-shrunk; an unconfigured local `assembleRelease`
+produces an unsigned APK that cannot be installed. No unsigned/debug fallback is published
+as a production release. Partial `SIGNING_*` configuration fails explicitly.
 
 ## Release signing and CI
 
@@ -126,7 +144,12 @@ exist**. Configure repository Actions secrets:
 Also configure the Actions variable `ANDROID_SIGNING_CERT_SHA256` with the trusted
 release certificate's public SHA-256 fingerprint. Production verification rejects
 unconfigured or mismatched identities, Android Debug certificates and debuggable APKs.
-The public certificate fingerprint is not a private signing key.
+The public certificate fingerprint is not a private signing key. Use a securely managed,
+backed-up production keystore; do not generate a new identity for each build or rotate it
+to avoid a Play Protect block. CI exposes credentials only to signing-related steps and
+deletes the temporary keystore. Create a reviewed `v1.0.3` tag only after configuring
+signing and completing device checks; the tag suffix must match APK versionName. The
+release includes checksums, public signer metadata and an APK inspection JSON report.
 
 Keep the same release key securely backed up for updates. The workflow decodes it into
 runner temporary storage, verifies the APK signature and deletes it after use. No signing

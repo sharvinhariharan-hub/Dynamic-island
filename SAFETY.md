@@ -79,6 +79,13 @@ Before recommending daily use, the maintainer must:
    Google makes the decision; changing signing keys or installation sources is not a fix
    for a security block and approval is not guaranteed.
 
+## Audit and appeal preparation
+
+The [1.0.3 audit](docs/security/AUDIT.md) records the merged-manifest, dependency, runtime,
+signing and distribution assessment. [Prepared appeal evidence](docs/play-protect/README.md)
+contains hashes and public fingerprints for both published APK candidates. No appeal was
+submitted, no production identity was fabricated, and unknown device facts remain unknown.
+
 ## Official guidance
 
 - [How Google Play Protect works](https://support.google.com/googleplay/answer/2812853)

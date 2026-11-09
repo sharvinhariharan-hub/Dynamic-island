@@ -1,0 +1,62 @@
+{
+  "apk_name": "dynamic-island-debug.apk",
+  "apk_sha256": "0a7d632a358d31f7c94e0fd4401f1467d7ee124c42ff149fccd184ee0bf34d44",
+  "package_name": "org.dynamicisland.app",
+  "version_name": "1.0.2",
+  "version_code": "3",
+  "min_sdk": 29,
+  "target_sdk": 36,
+  "permissions": [
+    "android.permission.SYSTEM_ALERT_WINDOW",
+    "android.permission.VIBRATE",
+    "org.dynamicisland.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+  ],
+  "components": [
+    {
+      "type": "activity",
+      "name": "org.dynamicisland.app.MainActivity",
+      "exported": true,
+      "permission": null
+    },
+    {
+      "type": "service",
+      "name": "org.dynamicisland.app.IslandNotificationListener",
+      "exported": true,
+      "permission": "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+    },
+    {
+      "type": "provider",
+      "name": "androidx.startup.InitializationProvider",
+      "exported": false,
+      "permission": null
+    },
+    {
+      "type": "receiver",
+      "name": "androidx.profileinstaller.ProfileInstallReceiver",
+      "exported": true,
+      "permission": "android.permission.DUMP"
+    }
+  ],
+  "backup_allowed": false,
+  "cleartext_allowed": false,
+  "debuggable": true,
+  "test_only": false,
+  "signature_verified": true,
+  "signer_certificate_sha256": [
+    "ce9286ba0873ad74c0849a55ed16b1a4757a27fd8944c109390a804ec0f74762"
+  ],
+  "signer_certificate_subjects": [
+    "C=US, O=Android, CN=Android Debug"
+  ],
+  "signature_details": "Verifies\nVerified using v1 scheme (JAR signing): false\nVerified using v2 scheme (APK Signature Scheme v2): true\nVerified using v3 scheme (APK Signature Scheme v3): false\nVerified using v3.1 scheme (APK Signature Scheme v3.1): false\nVerified using v4 scheme (APK Signature Scheme v4): false\nVerified for SourceStamp: false\nNumber of signers: 1\nSigner #1 certificate DN: C=US, O=Android, CN=Android Debug\nSigner #1 certificate SHA-256 digest: ce9286ba0873ad74c0849a55ed16b1a4757a27fd8944c109390a804ec0f74762\nSigner #1 certificate SHA-1 digest: c500fc38f109255e85a18de39d0ca30c74452c5d\nSigner #1 certificate MD5 digest: 0ea458cbcab69879307c96721c1b4984\nSigner #1 key algorithm: RSA\nSigner #1 key size (bits): 2048\nSigner #1 public key SHA-256 digest: 05e16fe758d98ec44f08b1ac8af9c0cf88ddfcbddeefad9aedec9b72eb4e4b37\nSigner #1 public key SHA-1 digest: b6b830898f181e5d3bfd9c29531d64bdde6af00f\nSigner #1 public key MD5 digest: d76e6ee4deffc784e621c826946712db",
+  "download_url": "https://github.com/sharvinhariharan-hub/Dynamic-island/releases/download/preview-4-1/dynamic-island-debug.apk",
+  "source_commit": "edead74cd512dd89dd240186323fb34160313f2a",
+  "purpose": "Candidate appeal evidence; confirm these exact bytes were blocked on the device",
+  "device_model": "Not provided",
+  "android_version_patch": "Not provided",
+  "play_protect_version": "Not provided",
+  "country_region": "Not provided",
+  "installer_package": "Not recorded; supplied screenshot shows the Downloads/file-manager installation flow",
+  "installation_date_time": "Not provided",
+  "google_approval": "Not established"
+}

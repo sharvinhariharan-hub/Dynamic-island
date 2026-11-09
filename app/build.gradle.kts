@@ -11,8 +11,8 @@ android {
         applicationId = "org.dynamicisland.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
@@ -21,9 +21,26 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     testOptions { unitTests.isIncludeAndroidResources = true }
+    val signingNames =
+        listOf(
+            "SIGNING_STORE_FILE",
+            "SIGNING_STORE_PASSWORD",
+            "SIGNING_KEY_ALIAS",
+            "SIGNING_KEY_PASSWORD",
+        )
+    val signingValues = signingNames.map { System.getenv(it) }
+    val hasReleaseSigning = signingValues.all { !it.isNullOrBlank() }
+    if (signingValues.any { !it.isNullOrBlank() } && !hasReleaseSigning) {
+        throw GradleException(
+            "Incomplete release signing configuration: provide all four SIGNING_* variables or none. Never use debug signing for release."
+        )
+    }
+    if (hasReleaseSigning && !file(signingValues.first()!!).isFile) {
+        throw GradleException("Configured release keystore is unavailable.")
+    }
     signingConfigs {
         create("release") {
-            if (System.getenv("SIGNING_STORE_FILE") != null) {
+            if (hasReleaseSigning) {
                 storeFile = file(System.getenv("SIGNING_STORE_FILE"))
                 storePassword = System.getenv("SIGNING_STORE_PASSWORD")
                 keyAlias = System.getenv("SIGNING_KEY_ALIAS")
@@ -33,9 +50,14 @@ android {
     }
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
-            if (System.getenv("SIGNING_STORE_FILE") != null)
-                signingConfig = signingConfigs.getByName("release")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
         }
     }
 }

@@ -1,0 +1,7 @@
+{
+  "checked_date": "2026-11-09",
+  "source": "https://api.osv.dev/v1/querybatch",
+  "components_queried": 108,
+  "findings": [],
+  "limitation": "Only public Maven coordinates were queried. No match is not proof of no vulnerabilities."
+}

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.3
+
+- Enable R8/resource shrinking for non-debuggable releases and reject partial signing configuration.
+- Remove the unused exported profiling diagnostic receiver; retain AndroidX startup optimization.
+- Recheck overlay/notification grants at action dispatch after permission revocation.
+- Replace Python assertions in production gates with checks that remain active under optimization.
+- Add security gate and real-signature fixture tests, packaged-APK JSON reports, and version-tag checks.
+- Limit CI signing secrets to signing steps and correct downloadable release checksum filenames.
+- Publish dependency audit results and exact-artifact metadata/drafts for official Play Protect review.
+- Keep required notification/overlay access and all core notification features; no protection bypass.
+
 ## 1.0.2
 
 - Disclose sensitive grants before opening Android permission settings.

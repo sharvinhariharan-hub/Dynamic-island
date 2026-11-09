@@ -74,7 +74,7 @@ class NotificationRepositoryTest {
 
     @Test
     fun canceledActionsFailWithoutCrashingAndRemoteInputsArePreserved() {
-        val repo = NotificationRepository(context)
+        val repo = NotificationRepository(context, runtimeGranted = { true })
         val pending =
             PendingIntent.getBroadcast(
                 context,
@@ -102,7 +102,7 @@ class NotificationRepositoryTest {
 
     @Test
     fun forgedCrossAppIntentsAreExcludedAndRejectedAtDispatch() {
-        val repo = NotificationRepository(context) { false }
+        val repo = NotificationRepository(context, runtimeGranted = { true }) { false }
         val foreign =
             PendingIntent.getBroadcast(
                 context,
@@ -128,7 +128,7 @@ class NotificationRepositoryTest {
     @Test
     fun lockIsRecheckedAtDispatchAfterRendering() {
         var locked = false
-        val repo = NotificationRepository(context) { locked }
+        val repo = NotificationRepository(context, runtimeGranted = { true }) { locked }
         val pending =
             PendingIntent.getBroadcast(
                 context,
@@ -140,6 +140,36 @@ class NotificationRepositoryTest {
         assertTrue(repo.send(action, "Allowed while unlocked"))
         locked = true
         assertFalse(repo.send(action, "Must not send"))
+        val item =
+            IslandNotification(
+                "key",
+                context.packageName,
+                "Sender",
+                "Message",
+                null,
+                pending,
+                emptyList(),
+                Notification.VISIBILITY_PRIVATE,
+                "hash",
+            )
+        assertFalse(repo.open(item))
+    }
+
+    @Test
+    fun permissionsAreRecheckedWhenInteractingAfterRevocation() {
+        var granted = true
+        val repo = NotificationRepository(context, runtimeGranted = { granted }) { false }
+        val pending =
+            PendingIntent.getBroadcast(
+                context,
+                91,
+                Intent("grant.revocation"),
+                PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        val action = IslandAction("Action", pending)
+        assertTrue(repo.send(action))
+        granted = false
+        assertFalse(repo.send(action))
         val item =
             IslandNotification(
                 "key",

@@ -11,6 +11,26 @@
 - DataStore encode/decode bounds, disk persistence across repository instances and reset.
 - RemoteInput preservation, reply dispatch and canceled PendingIntent failure.
 
+## Version 1.0.3 release/security audit (2026-11-09)
+
+Both debug and R8-optimized/resource-shrunk release APKs compile successfully. All 22
+Kotlin/JUnit/Robolectric tests pass in each variant (44 executions), and debug/release
+lint pass. R8 produces a mapping file and retains the framework manifest entry points.
+No device/emulator is available to validate actual optimized startup or hardware behavior.
+
+All 10 Python APK-policy tests pass normally and under `python -O`; the release checks
+use explicit failures, not removable assertions. Real optimized-APK tests sign temporary
+copies with one-day disposable identities and accept only the correct certificate pin;
+debug certificates, missing pins and incorrect pins fail. Fixture keys/APKs are deleted.
+Both packaged variants pass actual permission/component/backup/cleartext inspection;
+the unused profiling receiver is absent. Release remains unsigned without managed keys.
+
+108 resolved runtime Maven coordinates were checked against OSV, with no advisory match
+returned; this does not establish absence of vulnerabilities. See docs/security/AUDIT.md,
+the dependency inventory and point-in-time advisory results. Exact old APK hashes and
+public signing certificates are in docs/play-protect/ for human appeal preparation.
+Google approval and an on-device installation success are not claimed.
+
 ## Version 1.0.2 security validation (2026-11-09)
 
 The safety-hardening build compiles in debug and release variants. All 21 tests pass,

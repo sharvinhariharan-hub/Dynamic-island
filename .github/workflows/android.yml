@@ -29,9 +29,18 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'platform-tools'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew assembleDebug assembleRelease testDebugUnitTest lintDebug lintRelease --stacktrace
+      - name: Test APK verification gates (including optimized Python)
+        run: |
+          python3 -m unittest discover -s scripts/tests -v
+          python3 -O -m unittest discover -s scripts/tests
+      - run: ./gradlew assembleDebug assembleRelease testDebugUnitTest testReleaseUnitTest lintDebug lintRelease --stacktrace
       - name: Verify packaged permission boundary
-        run: python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+        run: |
+          python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk --report-json security-reports/debug-apk.json --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          python3 scripts/verify_apk.py app/build/outputs/apk/release/app-release-unsigned.apk --unsigned --report-json security-reports/release-unsigned.json --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -s app/build/outputs/mapping/release/mapping.txt
+      - name: Exercise signing gate with disposable test identities
+        run: python3 scripts/test_signing_gate.py --unsigned-apk app/build/outputs/apk/release/app-release-unsigned.apk --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - uses: actions/upload-artifact@v4
         with:
           name: debug-apk
@@ -42,7 +51,9 @@ jobs:
           name: quality-reports
           path: |
             app/build/reports/tests/
-            app/build/reports/lint-results-debug.*
+            app/build/reports/lint-results-*
+            security-reports/
+            app/build/outputs/mapping/release/
   preview:
     if: github.event_name == 'workflow_dispatch' && inputs.publish_debug_preview && github.ref == 'refs/heads/main'
     needs: build
@@ -77,16 +88,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      EXPECTED_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
-      STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-      SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - name: Check signing configuration
         id: signing
+        env:
+          EXPECTED_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+          STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
           if [[ -n "$STORE_B64" && -n "$SIGNING_STORE_PASSWORD" && -n "$SIGNING_KEY_ALIAS" && -n "$SIGNING_KEY_PASSWORD" && -n "$EXPECTED_SIGNING_CERT_SHA256" ]]; then
@@ -109,17 +120,26 @@ jobs:
         if: steps.signing.outputs.configured == 'true'
       - name: Build and verify signed release
         if: steps.signing.outputs.configured == 'true'
+        env:
+          EXPECTED_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+          STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
+          umask 077
           sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
           export SIGNING_STORE_FILE="$RUNNER_TEMP/release.jks"
           trap 'rm -f "$SIGNING_STORE_FILE"' EXIT
           printf '%s' "$STORE_B64" | base64 --decode > "$SIGNING_STORE_FILE"
+          unset STORE_B64
           ./gradlew assembleRelease lintRelease
-          python3 scripts/verify_apk.py app/build/outputs/apk/release/app-release.apk --production --expected-cert-sha256 "$EXPECTED_SIGNING_CERT_SHA256" --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" > APK-VERIFICATION.txt
-          sha256sum app/build/outputs/apk/release/app-release.apk > SHA256SUMS
+          python3 scripts/verify_apk.py app/build/outputs/apk/release/app-release.apk --production --expected-cert-sha256 "$EXPECTED_SIGNING_CERT_SHA256" --expected-version "${GITHUB_REF_NAME#v}" --report-json APK-VERIFICATION.json --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" > APK-VERIFICATION.txt
+          (cd app/build/outputs/apk/release && sha256sum app-release.apk) > SHA256SUMS
+          test -s app/build/outputs/mapping/release/mapping.txt
       - name: Publish release APK
         if: steps.signing.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/release/app-release.apk APK-VERIFICATION.txt SHA256SUMS --verify-tag --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/release/app-release.apk APK-VERIFICATION.txt APK-VERIFICATION.json SHA256SUMS --verify-tag --generate-notes

@@ -31,6 +31,14 @@ data class IslandNotification(
 
 class NotificationRepository(
     private val context: Context,
+    private val runtimeGranted: () -> Boolean = {
+        android.provider.Settings.canDrawOverlays(context) &&
+            context
+                .getSystemService(android.app.NotificationManager::class.java)
+                .isNotificationListenerAccessGranted(
+                    android.content.ComponentName(context, IslandNotificationListener::class.java)
+                )
+    },
     private val deviceLocked: () -> Boolean = {
         val keyguard = context.getSystemService(android.app.KeyguardManager::class.java)
         keyguard.isDeviceLocked || keyguard.isKeyguardLocked
@@ -116,6 +124,7 @@ class NotificationRepository(
 
     fun send(action: IslandAction, reply: String? = null): Boolean =
         runCatching {
+                check(runtimeGranted()) { "Required access was revoked" }
                 check(!deviceLocked()) { "Device must be unlocked" }
                 check(action.pending.creatorPackage == action.sourcePackage) {
                     "Action origin changed"
@@ -150,6 +159,7 @@ class NotificationRepository(
 
     fun open(item: IslandNotification): Boolean =
         runCatching {
+                check(runtimeGranted()) { "Required access was revoked" }
                 check(!deviceLocked()) { "Device must be unlocked" }
                 if (item.pending != null) {
                     check(item.pending.creatorPackage == item.pkg) { "Notification origin changed" }
